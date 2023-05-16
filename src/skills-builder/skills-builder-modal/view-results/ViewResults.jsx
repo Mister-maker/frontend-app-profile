@@ -1,5 +1,5 @@
 import React, {
-  useCallback, useContext, useEffect, useState,
+  useContext, useEffect, useState,
 } from 'react';
 import {
   Stack, Row, Alert, Spinner,
@@ -58,9 +58,24 @@ const ViewResults = () => {
       }));
 
       setJobSkillsList(jobInfo);
-      setSelectedJobTitle(jobInfo[0].name);
+      setSelectedJobTitle(results[0].name);
       setProductRecommendations(results);
       setIsLoading(false);
+      sendTrackEvent('edx.skills_builder.recommendation.shown', {
+        app_name: 'skills_builder',
+        category: 'skills_builder',
+        page: 'skills_builder',
+        selected_recommendations: {
+          job_id: results[0].id,
+          job_name: results[0].name,
+          /* We extract the title and course key into an array of objects */
+          course_keys: results[0].recommendations.course?.map(rec => ({
+            title: rec.title,
+            course_key: rec.active_run_key,
+          })),
+        },
+        is_default: true,
+      });
     };
     getRecommendations()
       .catch(() => {
@@ -69,34 +84,32 @@ const ViewResults = () => {
       });
   }, [careerInterests, jobSearchIndex, productSearchIndex]);
 
-  const sendRecommendationShownEvent = useCallback((selectedJobName, isDefault) => {
-    sendTrackEvent('edx.skills_builder.recommendation.shown', {
-      app_name: 'skills_builder',
-      category: 'skills_builder',
-      page: 'skills_builder',
-      selected_recommendations: productRecommendations.find(rec => rec.name === selectedJobName),
-      is_default: isDefault,
-    });
-  }, [productRecommendations]);
-
   useEffect(() => {
-    /*
-      This useEffect will fire when selectedJobTitle is changed
-      We initially setSelectedJobTitle when the recommendations are returned
-      We are sending an event with the is_default field set to true for the initial default selection
-    */
-    const newlySelectedRecommendations = productRecommendations.find(rec => rec.name === selectedJobTitle);
-    if (!selectedRecommendations && newlySelectedRecommendations) {
-      sendRecommendationShownEvent(selectedJobTitle, true);
-    }
-    setSelectedRecommendations(newlySelectedRecommendations);
-  }, [productRecommendations, selectedJobTitle, selectedRecommendations, sendRecommendationShownEvent]);
+    setSelectedRecommendations(productRecommendations.find(rec => rec.name === selectedJobTitle));
+  }, [productRecommendations, selectedJobTitle]);
 
   const handleJobTitleChange = (e) => {
     const { value } = e.target;
     setSelectedJobTitle(value);
     // The is_default value will be set to false for any selections made by the user
-    sendRecommendationShownEvent(value, false);
+    const currentSelection = productRecommendations.find(rec => rec.name === value);
+    const { id: jobId, name: jobName, recommendations } = currentSelection;
+    const courseKeys = recommendations.course?.map(rec => ({
+      title: rec.title,
+      course_key: rec.active_run_key,
+    }));
+
+    sendTrackEvent('edx.skills_builder.recommendation.shown', {
+      app_name: 'skills_builder',
+      category: 'skills_builder',
+      page: 'skills_builder',
+      selected_recommendations: {
+        job_id: jobId,
+        job_name: jobName,
+        course_keys: courseKeys,
+      },
+      is_default: false,
+    });
   };
 
   if (fetchError) {
